@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import sqlite3
 from pathlib import Path
 
@@ -26,8 +24,8 @@ def init_db() -> None:
                 user_id TEXT NOT NULL,
                 guild_id TEXT NOT NULL,
                 channel_id TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                status TEXT NOT NULL DEFAULT 'open'
+                status TEXT NOT NULL DEFAULT 'open',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
             CREATE TABLE IF NOT EXISTS role_panels (
@@ -35,7 +33,9 @@ def init_db() -> None:
                 guild_id TEXT NOT NULL,
                 channel_id TEXT NOT NULL,
                 message_id TEXT NOT NULL,
-                data TEXT NOT NULL DEFAULT '{}'
+                role_name TEXT NOT NULL,
+                role_id TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
             CREATE TABLE IF NOT EXISTS pinned_messages (
@@ -66,7 +66,60 @@ def init_db() -> None:
 def get_next_ticket_number() -> int:
     conn = get_connection()
     try:
-        row = conn.execute("SELECT COALESCE(MAX(ticket_number), 0) + 1 AS next_number FROM tickets").fetchone()
+        row = conn.execute(
+            "SELECT COALESCE(MAX(ticket_number), 0) + 1 AS next_number FROM tickets"
+        ).fetchone()
         return int(row["next_number"])
+    finally:
+        conn.close()
+
+
+def save_auth_user(discord_user_id: str, email: str | None, access_token: str | None, refresh_token: str | None, expires_at: str | None) -> None:
+    conn = get_connection()
+    try:
+        conn.execute(
+            """
+            INSERT INTO auth_users (discord_user_id, email, access_token, refresh_token, expires_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(discord_user_id)
+            DO UPDATE SET
+                email = excluded.email,
+                access_token = excluded.access_token,
+                refresh_token = excluded.refresh_token,
+                expires_at = excluded.expires_at
+            """,
+            (discord_user_id, email, access_token, refresh_token, expires_at),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def save_role_panel(guild_id: str, channel_id: str, message_id: str, role_name: str, role_id: str) -> None:
+    conn = get_connection()
+    try:
+        conn.execute(
+            """
+            INSERT INTO role_panels(guild_id, channel_id, message_id, role_name, role_id)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (guild_id, channel_id, message_id, role_name, role_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def save_pinned_message(guild_id: str, channel_id: str, message_id: str, content: str) -> None:
+    conn = get_connection()
+    try:
+        conn.execute(
+            """
+            INSERT INTO pinned_messages(guild_id, channel_id, message_id, content)
+            VALUES (?, ?, ?, ?)
+            """,
+            (guild_id, channel_id, message_id, content),
+        )
+        conn.commit()
     finally:
         conn.close()
